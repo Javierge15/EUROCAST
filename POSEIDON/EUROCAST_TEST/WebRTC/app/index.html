@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebRTC DataChannel Lab</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #eef; } /* Fondo azulado para diferenciar */
+        #metrics-display { background: #222; color: #0ff; padding: 10px; display: inline-block; margin-top: 10px; border-radius: 5px; font-family: monospace; }
+        .controls-box { margin-top: 20px; padding: 20px; border: 1px solid #ccc; background: white; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #4a90e2; color: white; border: none; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h2>WebRTC (UDP/SCTP) Telemetry Lab</h2>
+    <img id="videoFeed" src="" width="640" style="border: 2px solid #333;">
+    
+    <br>
+    <div id="metrics-display">
+        Latencia: <span id="lat">0</span> ms | Jitter: <span id="jit">0</span> ms | Frame: <span id="fid">0</span>
+    </div>
+
+    <div class="controls-box">
+        <button onclick="downloadCSV()">FINALIZAR Y DESCARGAR CSV (WebRTC)</button>
+        <p id="status">Conectando...</p>
+    </div>
+
+    <script>
+        const img = document.getElementById('videoFeed');
+        const latSpan = document.getElementById('lat');
+        const jitSpan = document.getElementById('jit');
+        const fidSpan = document.getElementById('fid');
+        const statusP = document.getElementById('status');
+
+        let metricsLog = [];
+        let lastLatency = 0;
+        let pc = null;
+        let dc = null;
+
+        async function startWebRTC() {
+            pc = new RTCPeerConnection();
+
+            // Crear Data Channel (reemplazo del WebSocket)
+            dc = pc.createDataChannel("telemetry_stream");
+            
+            dc.onopen = () => {
+                statusP.innerText = "Conectado por WebRTC (Data Channel)";
+                statusP.style.color = "green";
+                startControlLoop();
+            };
+
+            dc.onmessage = (event) => {
+                const now = Date.now() / 1000;
+                const payload = JSON.parse(event.data);
+                
+                // --- CÁLCULO DE MÉTRICAS (Idéntico a tu WS) ---
+                const latencyMS = (now - payload.t_sent) * 1000;
+                const jitter = Math.abs(latencyMS - lastLatency);
+                // En DataChannel event.data es string/blob igual que en WS
+                const dataSize = new Blob([event.data]).size; 
+                
+                lastLatency = latencyMS;
+
+                latSpan.innerText = latencyMS.toFixed(2);
+                jitSpan.innerText = jitter.toFixed(2);
+                fidSpan.innerText = payload.f_id;
+                img.src = payload.image;
+
+                metricsLog.push({
+                    frame: payload.f_id,
+                    latency: latencyMS.toFixed(4),
+                    jitter: jitter.toFixed(4),
+                    size: dataSize,
+                    timestamp: now
+                });
+            };
+
+            // Negociación (Signaling)
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+            const response = await fetch("/offer", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    sdp: pc.localDescription.sdp,
+                    type: pc.localDescription.type
+                })
+            });
+
+            const answer = await response.json();
+            await pc.setRemoteDescription(answer);
+        }
+
+        function startControlLoop() {
+            setInterval(() => {
+                if (dc && dc.readyState === "open") {
+                    const cmd = { t: Date.now(), steer: Math.random().toFixed(2) };
+                    dc.send(JSON.stringify(cmd));
+                }
+            }, 1000);
+        }
+
+        function downloadCSV() {
+            if (metricsLog.length === 0) return alert("No hay datos");
+            let csvContent = "data:text/csv;charset=utf-8,frame,latency_ms,jitter_ms,size_bytes,timestamp_unix\n";
+            metricsLog.forEach(m => {
+                csvContent += `${m.frame},${m.latency},${m.jitter},${m.size},${m.timestamp}\n`;
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "telemetry_webrtc.csv");
+            document.body.appendChild(link);
+            link.click();
+        }
+
+        startWebRTC();
+    </script>
+</body>
+</html>

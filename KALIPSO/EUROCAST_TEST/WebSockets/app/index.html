@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Websocket Telemetry Lab</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #f0f0f0; }
+        #metrics-display { background: #222; color: #0f0; padding: 10px; display: inline-block; margin-top: 10px; border-radius: 5px; font-family: monospace; }
+        .controls-box { margin-top: 20px; padding: 20px; border: 1px solid #ccc; background: white; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #d9534f; color: white; border: none; border-radius: 5px; }
+        #sync-status { font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+    <h2>WebSocket vs WebRTC: Telemetry Lab</h2>
+    <div id="sync-status">Estado: Sincronizando reloj...</div>
+    <img id="videoFeed" src="" width="640" style="border: 2px solid #333;">
+    
+    <br>
+    <div id="metrics-display">
+        Latencia: <span id="lat">0</span> ms | Jitter: <span id="jit">0</span> ms | Frame: <span id="fid">0</span>
+    </div>
+
+    <div class="controls-box">
+        <button onclick="downloadCSV()">FINALIZAR Y DESCARGAR CSV</button>
+        <p>Los comandos de control se envían automáticamente cada 1s.</p>
+    </div>
+
+    <script>
+        const ws = new WebSocket(`ws://${window.location.host}/ws`);
+        const img = document.getElementById('videoFeed');
+        const latSpan = document.getElementById('lat');
+        const jitSpan = document.getElementById('jit');
+        const fidSpan = document.getElementById('fid');
+        const syncStatus = document.getElementById('sync-status');
+
+        let metricsLog = [];
+        let lastLatency = 0;
+        let clockOffset = 0; // Diferencia entre reloj cliente y servidor
+        let isSynced = false;
+
+        ws.onopen = () => {
+            // Al conectar, pedimos sincronización
+            const t1 = Date.now() / 1000;
+            ws.send(JSON.stringify({ type: "sync_request", client_t1: t1 }));
+        };
+
+        ws.onmessage = (event) => {
+            const now = Date.now() / 1000;
+            const payload = JSON.parse(event.data);
+            
+            // CASO A: Respuesta de sincronización
+            if (payload.type === "sync_response") {
+                const t1 = payload.client_t1;
+                const t2 = payload.server_time;
+                const t3 = now;
+                const rtt = t3 - t1;
+                
+                // Algoritmo de Cristian: offset = t2 - (t1 + RTT/2)
+                clockOffset = t2 - (t1 + rtt / 2);
+                isSynced = true;
+                syncStatus.innerText = `Reloj Sincronizado (RTT: ${(rtt*1000).toFixed(2)}ms | Offset: ${(clockOffset*1000).toFixed(2)}ms)`;
+                return;
+            }
+
+            // CASO B: Frame de Video
+            if (payload.type === "video_frame" && isSynced) {
+                // Ajustamos el tiempo de envío del servidor al reloj local del cliente
+                const adjustedSentTime = payload.t_sent - clockOffset;
+                const latencyMS = (now - adjustedSentTime) * 1000;
+                
+                // Si la red es muy rápida, la latencia podría dar 0.0001, pero ya no -1700ms
+                const jitter = Math.abs(latencyMS - lastLatency);
+                const dataSize = new Blob([event.data]).size;
+                
+                lastLatency = latencyMS;
+
+                // Actualizar UI
+                latSpan.innerText = latencyMS.toFixed(2);
+                jitSpan.innerText = jitter.toFixed(2);
+                fidSpan.innerText = payload.f_id;
+                img.src = payload.image;
+
+                // Guardar en el log
+                metricsLog.push({
+                    frame: payload.f_id,
+                    latency: latencyMS.toFixed(4),
+                    jitter: jitter.toFixed(4),
+                    size: dataSize,
+                    timestamp: now
+                });
+            }
+        };
+
+        // Teleoperación
+        setInterval(() => {
+            if(ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: "control", t: Date.now(), steer: Math.random().toFixed(2) }));
+            }
+        }, 1000);
+
+        function downloadCSV() {
+            if (metricsLog.length === 0) return alert("No hay datos");
+            let csvContent = "data:text/csv;charset=utf-8,frame,latency_ms,jitter_ms,size_bytes,timestamp_unix\n";
+            metricsLog.forEach(m => {
+                csvContent += `${m.frame},${m.latency},${m.jitter},${m.size},${m.timestamp}\n`;
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "telemetry_websockets.csv");
+            document.body.appendChild(link);
+            link.click();
+        }
+    </script>
+</body>
+</html>

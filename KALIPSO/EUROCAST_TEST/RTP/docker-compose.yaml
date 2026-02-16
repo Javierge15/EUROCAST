@@ -1,0 +1,13 @@
+services:
+  camera-streamer:
+    build: .
+    container_name: rtp_camera_service
+    network_mode: "host"
+    devices:
+      - "/dev/video0:/dev/video0"
+      - "/dev/video1:/dev/video1"
+    volumes:
+      - .:/app  # Mapea la carpeta actual para que el .sdp se guarde fuera
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1

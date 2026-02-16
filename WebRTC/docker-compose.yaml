@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  webrtc-node:
+    build: .
+    container_name: webrtc_research
+    network_mode: "host" # Crucial para WebRTC para evitar problemas de NAT/Puertos
+    devices:
+      - "/dev/video3:/dev/video3"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./app:/app

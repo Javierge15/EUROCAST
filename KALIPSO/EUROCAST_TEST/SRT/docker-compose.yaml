@@ -1,0 +1,12 @@
+services:
+  camera-streamer:
+    build: .
+    container_name: srt_camera_service
+    network_mode: "host"
+    devices:
+      - "/dev/video0:/dev/video0"
+      - "/dev/video1:/dev/video1"
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONUNBUFFERED=1

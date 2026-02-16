@@ -1,0 +1,5 @@
+Test_Case,Mean Latency,Std Dev (Jitter),Max Latency,P99 Latency
+WebRTC Moving,86.65,52.35,600.78,363.85
+WebRTC Stopped,94.39,66.85,541.33,483.72
+WebSockets Moving,292.24,8.39,408.76,314.83
+WebSockets Stopped,294.05,9.12,391.95,317.11

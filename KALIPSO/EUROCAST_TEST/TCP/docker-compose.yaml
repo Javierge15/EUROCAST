@@ -1,0 +1,24 @@
+services:
+  receiver:
+    build: .
+    image: tcp-tester
+    container_name: tcp_receiver
+    network_mode: "host"
+    volumes:
+      - .:/app
+    environment:
+      - TCP_PORT=5005
+    command: python receiver.py
+    restart: unless-stopped
+
+  sender:
+    build: .
+    image: tcp-tester
+    container_name: tcp_sender
+    network_mode: "host"
+    volumes:
+      - .:/app
+    environment:
+      - TARGET_IP=10.118.91.71   # REPLACE WITH VEHICLE IP ADRESS
+      - TCP_PORT=5005
+    command: python sender.py

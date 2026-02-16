@@ -1,0 +1,5 @@
+Test_Case,Mean (ms),Std Dev (ms),P99 (ms)
+WebRTC Moving,86.65,52.35,363.85
+WebRTC Stopped,94.39,66.85,483.72
+WebSockets Moving,292.24,8.39,314.83
+WebSockets Stopped,294.05,9.12,317.11
